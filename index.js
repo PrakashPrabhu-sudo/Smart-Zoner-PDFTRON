@@ -153,13 +153,15 @@ const main = async () => {
   let zones = [];
   const xfdfData = await parseString(reqFile.xfdf.data);
   for (let zone of xfdfData.xfdf.annots[0].square) {
-    const [x1, y1, x2, y2] = zone.$.rect.split(",");
-    // const [x1, y2, x2, y1] = zone.$.rect.split(",");
+    // const [x1, y1, x2, y2] = zone.$.rect.split(",");
+    const [x1, y2, x2, y1] = zone.$.rect.split(",");
     const color = zone.$.color;
     // var x1 = rectCoordinates[0],
     //   y2 = rectCoordinates[1],
     //   x2 = rectCoordinates[2];
     // y1 = rectCoordinates[3];
+    let Y1 = pageHeight - y2;
+    let HEIGHT = y2 - y1;
     zones.push(
       new Map([
         ["x1", +x1],
@@ -167,6 +169,7 @@ const main = async () => {
         ["x2", +x2],
         ["y2", pageHeight - y2],
         ["color", color],
+        ["article no", zones.length + 1],
       ])
     );
   }
@@ -186,9 +189,11 @@ const main = async () => {
       if (!content) content += para.text;
       else content = content + "\n" + para.text;
       x1 = Math.min(para.rect[0], x1);
-      y1 = Math.min(pageHeight - para.rect[1], y1);
+      // y1 = Math.min(pageHeight - para.rect[1], y1);
+      y1 = Math.min(pageHeight - para.rect[3], y1);
       x2 = Math.max(para.rect[2], x2);
-      y2 = Math.max(pageHeight - para.rect[3], y2);
+      // y2 = Math.max(pageHeight - para.rect[3], y2);
+      y2 = Math.max(pageHeight - para.rect[1], y2);
     }
     textZone.push(
       new Map([
@@ -212,7 +217,7 @@ const main = async () => {
       );
       if (isContained) {
         segment.set("tagged", true);
-        segment.set("taggedTo", zone.get("color"));
+        segment.set("taggedTo", zone.get("article no"));
       }
     }
   }
