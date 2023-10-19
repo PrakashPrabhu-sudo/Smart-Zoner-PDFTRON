@@ -8,6 +8,7 @@ const { PDFNet } = require("@pdftron/pdfnet-node");
 const imageExtract = require("./Utils/imageExtract");
 const unzipper = require("./Utils/Unzipper");
 const CartesianThings = require("./Utils/CartesianThings");
+const colorArr = require("./Utils/colors");
 
 const demo = process.env.demo;
 
@@ -93,10 +94,16 @@ const getPdf = async (path) => {
 };
 
 const main = async () => {
+  await await PDFNet.initialize(
+    "demo:kishore.k@harnstech.com:7abe10f00200000000ab2ff8f0e2d8d969089ccb724506a23f33470aeb"
+  );
+  const pdfFileName = "test.pdf";
+  const { originalFile: file, pageHeight } = await getPdf(pdfFileName);
   // Image Extraction
   const tempImgArr = await imageExtract(
     `${__dirname}/test.pdf`,
-    `${__dirname}/Images/`
+    `${__dirname}/Images/`,
+    pageHeight
   );
 
   // Checking each images if their centers are inside other image
@@ -125,11 +132,10 @@ const main = async () => {
     }
     num++;
   }
-  imgArr.push(new Map(tempImgArr[num]));
+  const temp = new Map(tempImgArr[num]);
+  temp.delete("isCompleteImage");
+  imgArr.push(temp);
   // -------ImgArr contains the required image information----------
-
-  const pdfFileName = "test.pdf";
-  const { originalFile: file, pageHeight } = await getPdf(pdfFileName);
 
   // Surface Zoning Started...
   const pdfAnnotation = await surfaceZoning(file, pdfFileName);
@@ -152,16 +158,11 @@ const main = async () => {
   // Surface zones
   let zones = [];
   const xfdfData = await parseString(reqFile.xfdf.data);
+
   for (let zone of xfdfData.xfdf.annots[0].square) {
     // const [x1, y1, x2, y2] = zone.$.rect.split(",");
     const [x1, y2, x2, y1] = zone.$.rect.split(",");
     const color = zone.$.color;
-    // var x1 = rectCoordinates[0],
-    //   y2 = rectCoordinates[1],
-    //   x2 = rectCoordinates[2];
-    // y1 = rectCoordinates[3];
-    let Y1 = pageHeight - y2;
-    let HEIGHT = y2 - y1;
     zones.push(
       new Map([
         ["x1", +x1],
@@ -169,15 +170,17 @@ const main = async () => {
         ["x2", +x2],
         ["y2", pageHeight - y2],
         ["color", color],
+        ["customColor", colorArr[zones.length % 12]],
         ["article no", zones.length + 1],
       ])
     );
   }
-  console.log(zones);
+
   // Article Zones
   let textContents = Buffer.from(reqFile.json.data);
   textContents = textContents.toString("utf-8");
   textContents = JSON.parse(textContents);
+  // Merging lines zones to a complete para zones
   let textZone = [];
   for (let segment of textContents.pages[0].elements) {
     let x1 = Infinity,
@@ -206,7 +209,7 @@ const main = async () => {
       ])
     );
   }
-  // console.log("textContents: ", textContents);
+  // Tagging para and image zones to surface zones
   for (let zone of zones) {
     for (let segment of textZone) {
       if (segment.get("tagged")) continue;
@@ -220,8 +223,98 @@ const main = async () => {
         segment.set("taggedTo", zone.get("article no"));
       }
     }
+    for (let img of imgArr) {
+      if (img.get("tagged")) continue;
+      const centerOfImage = CartesianThings.centerOf(img);
+      const isContained = CartesianThings.isContainedWitinin(
+        centerOfImage,
+        zone
+      );
+      if (isContained) {
+        img.set("tagged", true);
+        img.set("taggedTo", zone.get("article no"));
+      }
+    }
   }
-  console.log("textZone: ", textZone);
+
+  // Object with article no as key and value as para zones
+  const articleCollection = {};
+  for (let data of textZone) {
+    if (data.get("tagged") == false) continue;
+    else {
+      const reqData = {
+        zoneText: data.get("content"),
+        coordinates: {
+          x1: data.get("x1"),
+          y1: data.get("y1"),
+          x2: data.get("x2"),
+          y2: data.get("y2"),
+        },
+      };
+      if (!articleCollection[`article_no:${data.get("taggedTo")}`]) {
+        articleCollection[`article_no:${data.get("taggedTo")}`] = [reqData];
+      } else
+        articleCollection[`article_no:${data.get("taggedTo")}`].push(reqData);
+    }
+  }
+  // Object with article no as key and value as image zones
+  for (let img of imgArr) {
+    if (img.get("tagged") == null) continue;
+    else {
+      const reqData = {
+        zoneText: "Image",
+        coordinates: {
+          x1: img.get("x1"),
+          y1: img.get("y1"),
+          x2: img.get("x2"),
+          y2: img.get("y2"),
+        },
+      };
+      if (!articleCollection[`article_no:${img.get("taggedTo")}`]) {
+        articleCollection[`article_no:${img.get("taggedTo")}`] = [reqData];
+      } else
+        articleCollection[`article_no:${img.get("taggedTo")}`].push(reqData);
+    }
+  }
+  for (let zone of zones) {
+    if (
+      Object.keys(articleCollection).includes(
+        `article_no:${zone.get("article no")}`
+      )
+    ) {
+      articleCollection[`article_no:${zone.get("article no")}`] = {
+        ArticleJson: articleCollection[`article_no:${zone.get("article no")}`],
+        color: zone.get("customColor"),
+        coordinates: {
+          x1: zone.get("x1"),
+          y1: zone.get("y1"),
+          x2: zone.get("x2"),
+          y2: zone.get("y2"),
+        },
+        articleID: zone.get("article no"),
+      };
+    }
+  }
+
+  const reqArr = [];
+  for (let article in articleCollection)
+    reqArr.push(articleCollection[article]);
+
+  const sample = fs.createWriteStream(`${__dirname}/sample.json`);
+  const sampleData = [];
+  for (let map of zones) {
+    const data = {
+      x1: map.get("x1"),
+      x2: map.get("x2"),
+      y2: map.get("y2"),
+      y1: map.get("y1"),
+      color: map.get("customColor"),
+      "article no": map.get("article no"),
+    };
+    sampleData.push(data);
+  }
+  sample.write(JSON.stringify(sampleData));
+  sample.close();
 };
 
 main();
