@@ -124,10 +124,12 @@ const main = async () => {
     if (FIS || SIF) {
       const newImg = CartesianThings.mergeBox(firstImg, secondImg);
       newImg.delete("isCompleteImage");
+      newImg.set("Tag", "Image");
       imgArr.push(newImg);
     } else {
       const temp = new Map(firstImg);
       temp.delete("isCompleteImage");
+      temp.set("Tag", "Image");
       imgArr.push(temp);
     }
     num++;
@@ -181,16 +183,18 @@ const main = async () => {
   textContents = textContents.toString("utf-8");
   textContents = JSON.parse(textContents);
   // Merging lines zones to a complete para zones
-  let textZone = [];
+  let tempTextZone = [];
   for (let segment of textContents.pages[0].elements) {
     let x1 = Infinity,
       y1 = Infinity,
       x2 = -Infinity,
       y2 = -Infinity,
-      content = "";
+      content = "",
+      style;
     for (let para of segment.kids) {
       if (!content) content += para.text;
       else content = content + "\n" + para.text;
+      style = para.style;
       x1 = Math.min(para.rect[0], x1);
       // y1 = Math.min(pageHeight - para.rect[1], y1);
       y1 = Math.min(pageHeight - para.rect[3], y1);
@@ -198,27 +202,78 @@ const main = async () => {
       // y2 = Math.max(pageHeight - para.rect[3], y2);
       y2 = Math.max(pageHeight - para.rect[1], y2);
     }
-    textZone.push(
+    tempTextZone.push(
       new Map([
         ["x1", x1],
         ["y1", y1],
         ["x2", x2],
         ["y2", y2],
+        ["Tag", "text"],
+        ["style", style],
         ["content", content],
         ["tagged", false],
       ])
     );
   }
+  // Merging first letter with body
+  let tempMergedTextZone = [];
+  let i = 0;
+  while (i < tempTextZone.length - 1) {
+    const zone = tempTextZone[i];
+    const nextZone = tempTextZone[i + 1];
+    if (zone.get("content").trim().length === 1) {
+      const newZone = CartesianThings.mergeBox(zone, nextZone);
+      newZone.set("content", zone.get("content") + nextZone.get("content"));
+      tempMergedTextZone.push(newZone);
+      i += 2;
+    } else {
+      tempMergedTextZone.push(zone);
+      i++;
+    }
+  }
+  tempMergedTextZone.push(tempTextZone[i]);
+  tempTextZone = tempMergedTextZone;
+  // Merging article body(zones with same width and if there touch or overlap)
+  let textZone = [];
+  i = 0;
+  let j = 1;
+  while (j < tempTextZone.length) {
+    const zone = tempTextZone[i];
+    const nextZone = tempTextZone[j];
+    const cond = (i, j) => {
+      return (
+        tempTextZone[i].get("x1") - tempTextZone[j].get("x1") <= 1 &&
+        tempTextZone[i].get("x2") - tempTextZone[j].get("x2") <= 1 &&
+        CartesianThings.isOverlappingOrTouching_approx(
+          tempTextZone[i],
+          tempTextZone[j]
+        )
+      );
+    };
+    if (cond(i, j)) {
+      while (cond(j, j + 1)) {
+        j++;
+      }
+      const newZone = CartesianThings.mergeBox(
+        tempTextZone[i],
+        tempTextZone[j]
+      );
+      textZone.push(newZone);
+      i = j + 1;
+      j = i + 1;
+    } else {
+      textZone.push(zone);
+      i++;
+      j++;
+    }
+  }
+  textZone.push(tempTextZone[i]);
   // Tagging para and image zones to surface zones
   for (let zone of zones) {
     for (let segment of textZone) {
       if (segment.get("tagged")) continue;
-      const centerOfSegment = CartesianThings.centerOf(segment);
-      const isContained = CartesianThings.isContainedWitinin(
-        centerOfSegment,
-        zone
-      );
-      if (isContained) {
+      const isOverlapping = CartesianThings.isOverlapping(segment, zone);
+      if (isOverlapping) {
         segment.set("tagged", true);
         segment.set("taggedTo", zone.get("article no"));
       }
@@ -236,14 +291,36 @@ const main = async () => {
       }
     }
   }
+  // Handling UnTagged data
+  let unTaggedTextZone = textZone
+    .filter((item) => !item.get("tagged"))
+    .map((item) => {
+      const temp = new Map(item);
+      temp.set("tagged", true);
+      temp.set("taggedTo", "unknown...👻");
+      return temp;
+    });
+  let unTaggedImg = imgArr
+    .filter((item) => !item.get("tagged"))
+    .map((item) => {
+      const temp = new Map(item);
+      temp.set("tagged", true);
+      temp.set("taggedTo", "unknown...👻");
+      return temp;
+    });
+
+  textZone = textZone.concat(unTaggedTextZone);
+  imgArr = imgArr.concat(unTaggedImg);
 
   // Object with article no as key and value as para zones
   const articleCollection = {};
   for (let data of textZone) {
-    if (data.get("tagged") == false) continue;
+    if (!data.get("tagged")) continue;
     else {
       const reqData = {
         zoneText: data.get("content"),
+        style: data.get("style"), //TODO: no need to store this
+        Tag: data.get("Tag"),
         coordinates: {
           x1: data.get("x1"),
           y1: data.get("y1"),
@@ -262,7 +339,7 @@ const main = async () => {
     if (img.get("tagged") == null) continue;
     else {
       const reqData = {
-        zoneText: "Image",
+        Tag: img.get("Tag"),
         coordinates: {
           x1: img.get("x1"),
           y1: img.get("y1"),
@@ -295,11 +372,20 @@ const main = async () => {
       };
     }
   }
-
+  articleCollection["article_no:unknown...👻"] = {
+    ArticleJson: articleCollection["article_no:unknown...👻"],
+    color: "#000000",
+    coordinates: {
+      x1: 0,
+      y1: 0,
+      x2: 0,
+      y2: 0,
+    },
+    articleID: "unknown",
+  };
   const reqArr = [];
   for (let article in articleCollection)
     reqArr.push(articleCollection[article]);
-
   const sample = fs.createWriteStream(`${__dirname}/sample.json`);
   const sampleData = [];
   for (let map of zones) {
