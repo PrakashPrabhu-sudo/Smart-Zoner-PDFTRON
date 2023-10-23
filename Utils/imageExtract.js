@@ -17,22 +17,20 @@ const imageExtract = async (reader, outputPath) => {
         x2 = result.x;
         y2 = result.y;
 
-        if (demo) {
-          console.log("--> Image: " + ++image_counter);
-          console.log(" Width: " + (await element.getImageWidth()));
-          console.log(" Height: " + (await element.getImageHeight()));
-          console.log(" BPC: " + (await element.getBitsPerComponent()));
-          console.log(
-            " Coords: x1=" +
-              ctm.m_h.toFixed(2) +
-              ", y1=" +
-              ctm.m_v.toFixed(2) +
-              ", x2=" +
-              x2.toFixed(2) +
-              ", y2=" +
-              y2.toFixed(2)
-          );
-        }
+        console.log("--> Image: " + ++image_counter);
+        console.log(" Width: " + (await element.getImageWidth()));
+        console.log(" Height: " + (await element.getImageHeight()));
+        console.log(" BPC: " + (await element.getBitsPerComponent()));
+        console.log(
+          " Coords: x1=" +
+            ctm.m_h.toFixed(2) +
+            ", y1=" +
+            ctm.m_v.toFixed(2) +
+            ", x2=" +
+            x2.toFixed(2) +
+            ", y2=" +
+            y2.toFixed(2)
+        );
 
         if ((await element.getType()) == PDFNet.Element.Type.e_image) {
           const image = await PDFNet.Image.createFromObj(

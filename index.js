@@ -386,6 +386,26 @@ const main = async () => {
   const reqArr = [];
   for (let article in articleCollection)
     reqArr.push(articleCollection[article]);
+  // DB op
+  const mongoose = require("mongoose");
+  mongoose.set("strictQuery", true);
+  mongoose
+    .connect(
+      "mongodb+srv://java:gogomaster@database.qrvyh.mongodb.net/smart-zoner?retryWrites=true&w=majority"
+    )
+    .then(async () => {
+      console.log(
+        "Connected to DB",
+        "mongodb+srv://java:gogomaster@database.qrvyh.mongodb.net/smart-zoner?retryWrites=true&w=majority"
+      );
+      await mongoose.connection.db.collection("temp_articles").deleteMany({});
+      const art = await mongoose.connection.db
+        .collection("temp_articles")
+        .insertMany(reqArr);
+      console.log("art: ", art);
+    })
+    .catch((err) => console.log(`Unable to connect to DB ${err}`));
+  // DB op
   const sample = fs.createWriteStream(`${__dirname}/sample.json`);
   const sampleData = [];
   for (let map of zones) {

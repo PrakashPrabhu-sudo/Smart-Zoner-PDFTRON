@@ -6,10 +6,10 @@
  */
 exports.isOverlapping = (rect_1, rect_2) => {
   if (
-    rect_1.get("x1") > rect_2.get("x2") ||
-    rect_2.get("x2") < rect_2.get("x1") ||
-    rect_1.get("y1") > rect_2.get("y2") ||
-    rect_1.get("y2") < rect_2.get("y1")
+    rect_1.get("x1") >= rect_2.get("x2") ||
+    rect_1.get("x2") <= rect_2.get("x1") ||
+    rect_1.get("y1") >= rect_2.get("y2") ||
+    rect_1.get("y2") <= rect_2.get("y1")
   )
     return false;
   console.log(rect_1.get("name"), "and", rect_2.get("name"), "are overlapping");
@@ -22,12 +22,29 @@ exports.isOverlapping = (rect_1, rect_2) => {
  * @param {*} rect_2
  * @returns
  */
+exports.isOverlappingOrTouching_approx = (rect_1, rect_2) => {
+  if (
+    (rect_1.get("x1") | 0) > ((rect_2.get("x2") + 1) | 0) ||
+    ((rect_1.get("x2") + 1) | 0) < (rect_2.get("x1") | 0) ||
+    (rect_1.get("y1") | 0) > ((rect_2.get("y2") + 1) | 0) ||
+    ((rect_1.get("y2") + 1) | 0) < (rect_2.get("y1") | 0)
+  )
+    return false;
+  console.log(rect_1.get("name"), "and", rect_2.get("name"), "are overlapping");
+  return true;
+};
+/**
+ * Returns true/false depending on whether the image is overlapping or touching
+ * @param {*} rect_1
+ * @param {*} rect_2
+ * @returns
+ */
 exports.isOverlappingOrTouching = (rect_1, rect_2) => {
   if (
-    rect_1.get("x1") >= rect_2.get("x2") ||
-    rect_2.get("x2") <= rect_2.get("x1") ||
-    rect_1.get("y1") >= rect_2.get("y2") ||
-    rect_1.get("y2") <= rect_2.get("y1")
+    (rect_1.get("x1") | 0) > (rect_2.get("x2") | 0) ||
+    (rect_1.get("x2") | 0) < (rect_2.get("x1") | 0) ||
+    (rect_1.get("y1") | 0) > (rect_2.get("y2") | 0) ||
+    (rect_1.get("y2") | 0) < (rect_2.get("y1") | 0)
   )
     return false;
   console.log(rect_1.get("name"), "and", rect_2.get("name"), "are overlapping");
