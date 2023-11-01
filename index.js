@@ -478,8 +478,9 @@ const main = async () => {
   //     articleMap.set(JSON.stringify(key), newMap);
   //   }
   // }
-  let article_segregation_2 = {};
 
+  let article_segregation_2 = {};
+  // segregation_2 changes the raw style to it's tag type
   const getParent = (arr, idx) => {
     const index = ((idx - 1) / 2) | 0;
     return { value: arr[index].val, index };
@@ -535,6 +536,12 @@ const main = async () => {
   for (let [key, value] of Object.entries(
     JSON.parse(JSON.stringify(article_segregation))
   )) {
+    // Handling untagged articles
+    const { articleID } = JSON.parse(key);
+    if (articleID === "unknown") {
+      article_segregation_2[key] = value;
+      continue;
+    }
     // content with maximum characters will be stored in below variable
     let maxLength = { key: "unknown", length: -Infinity };
     // content with single letter will be stored in below variable
@@ -548,8 +555,12 @@ const main = async () => {
       characterLengths = [];
 
     for (let [style, contentArr] of Object.entries(value)) {
-      if (style === "Image" || style === "textContents") {
-        article_segregation_2[key] = contentArr;
+      if (style === "Image") {
+        article_segregation_2 = {
+          ...article_segregation_2,
+          // [key]: { [style]: contentArr },
+          [key]: { Image: contentArr },
+        };
       } else {
         const text_style = JSON.parse(style);
         // const { color, size, weight, italic, serif } = style;
@@ -590,7 +601,16 @@ const main = async () => {
     delete temp[highestCharacter];
     if (oneLetter.length !== 0) {
       for (let letter of oneLetter) {
-        temp.body.push(letter.content);
+        const new_content = letter.content.zoneText + temp.body[0].zoneText;
+        const new_zone = CartesianThings.mergeBox(
+          new Map(Object.entries(letter.content.textCoordinate)),
+          new Map(Object.entries(temp.body[0].textCoordinate))
+        );
+        temp.body.splice(0, 1, {
+          textCoordinate: Object.fromEntries(new_zone),
+          zoneText: new_content,
+        });
+        // temp.body.push(letter.content);
         delete temp[letter.style];
       }
     }
@@ -603,12 +623,24 @@ const main = async () => {
     delete temp[largestFontSize];
     article_segregation_2[key] = temp;
   }
+
+  // TODO:
+  // In each style, check if there is a content with just one letter
+  // If yes, check for zones that itercepts and then merge the firstletter with body
+  // 2 approaches, check for zones that itercepts on right side - so first letter will be merged as it is suppose to
+  // or merge it and then check for overlapping and merge zones that overlap - entire content will be merged and then dupilate part will be removed
+  // -------------------------
+
+  // Merge sytle values that overlap
+  // TODO: Loop entirely or sort based on distance and then use the below approach
   for (let [key, article_zone] of Object.entries(article_segregation_2)) {
     for (let [style, text_zone_arr] of Object.entries(article_zone)) {
       textZone = [];
+      const { articleID } = JSON.parse(key);
       if (
+        articleID === "unknown" ||
         style === "Image" ||
-        style === "textContents" ||
+        //  For undefined title
         text_zone_arr == null
       )
         continue;
@@ -663,7 +695,8 @@ const main = async () => {
           j++;
         }
       }
-      textZone.push({ ...text_zone_arr[i], tag: style });
+      if (i < text_zone_arr.length)
+        textZone.push({ ...text_zone_arr[i], tag: style });
       // Merge Completed
       article_segregation_2[key][style] = textZone;
     }
