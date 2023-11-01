@@ -215,59 +215,69 @@ const main = async () => {
       ])
     );
   }
-  // Merging first letter with body
-  let tempMergedTextZone = [];
-  let i = 0;
-  while (i < tempTextZone.length - 1) {
-    const zone = tempTextZone[i];
-    const nextZone = tempTextZone[i + 1];
-    if (zone.get("content").trim().length === 1) {
-      const newZone = CartesianThings.mergeBox(zone, nextZone);
-      newZone.set("content", zone.get("content") + nextZone.get("content"));
-      tempMergedTextZone.push(newZone);
-      i += 2;
-    } else {
-      tempMergedTextZone.push(zone);
-      i++;
-    }
-  }
-  tempMergedTextZone.push(tempTextZone[i]);
-  tempTextZone = tempMergedTextZone;
-  // Merging article body(zones with same width and if there touch or overlap)
-  let textZone = [];
-  i = 0;
-  let j = 1;
-  while (j < tempTextZone.length) {
-    const zone = tempTextZone[i];
-    const nextZone = tempTextZone[j];
-    const cond = (i, j) => {
-      return (
-        tempTextZone[i].get("x1") - tempTextZone[j].get("x1") <= 1 &&
-        tempTextZone[i].get("x2") - tempTextZone[j].get("x2") <= 1 &&
-        CartesianThings.isOverlappingOrTouching_approx(
-          tempTextZone[i],
-          tempTextZone[j]
-        )
-      );
-    };
-    if (cond(i, j)) {
-      while (cond(j, j + 1)) {
-        j++;
-      }
-      const newZone = CartesianThings.mergeBox(
-        tempTextZone[i],
-        tempTextZone[j]
-      );
-      textZone.push(newZone);
-      i = j + 1;
-      j = i + 1;
-    } else {
-      textZone.push(zone);
-      i++;
-      j++;
-    }
-  }
-  textZone.push(tempTextZone[i]);
+  // // Merging first letter with body
+  // let tempMergedTextZone = [];
+  // let i = 0;
+  // while (i < tempTextZone.length - 1) {
+  //   const zone = tempTextZone[i];
+  //   const nextZone = tempTextZone[i + 1];
+  //   if (zone.get("content").trim().length === 1) {
+  //     const newZone = CartesianThings.mergeBox(zone, nextZone);
+  //     newZone.set("content", zone.get("content") + nextZone.get("content"));
+  //     tempMergedTextZone.push(newZone);
+  //     i += 2;
+  //   } else {
+  //     tempMergedTextZone.push(zone);
+  //     i++;
+  //   }
+  // }
+  // tempMergedTextZone.push(tempTextZone[i]);
+  // tempTextZone = tempMergedTextZone;
+  // // Merge Completed
+
+  // // Merging article body(zones with same width and if there touch or overlap)
+  // let textZone = [];
+  // i = 0;
+  // let j = 1;
+  // while (j < tempTextZone.length) {
+  //   const zone = tempTextZone[i];
+  //   const nextZone = tempTextZone[j];
+  //   const cond = (i, j) => {
+  //     const isOverlapping = CartesianThings.isOverlappingOrTouching_approx(
+  //       tempTextZone[i],
+  //       tempTextZone[j]
+  //     );
+  //     return (
+  //       tempTextZone[i].get("x1") - tempTextZone[j].get("x1") <= 1 &&
+  //       tempTextZone[i].get("x2") - tempTextZone[j].get("x2") <= 1 &&
+  //       isOverlapping
+  //     );
+  //   };
+  //   if (cond(i, j)) {
+  //     while (cond(j, j + 1)) {
+  //       j++;
+  //     }
+  //     const newZone = CartesianThings.mergeBox(
+  //       tempTextZone[i],
+  //       tempTextZone[j]
+  //     );
+  //     let newContent = [];
+  //     for (let idx = i; idx <= j; idx++)
+  //       newContent.push(tempTextZone[idx].get("content"));
+  //     newZone.set("content", newContent.join("\n"));
+  //     textZone.push(newZone);
+  //     i = j + 1;
+  //     j = i + 1;
+  //   } else {
+  //     textZone.push(zone);
+  //     i++;
+  //     j++;
+  //   }
+  // }
+  // textZone.push(tempTextZone[i]);
+  // // Merge Completed
+  let textZone = tempTextZone; // comment for merging body (for now)
+
   // Tagging para and image zones to surface zones
   for (let zone of zones) {
     for (let segment of textZone) {
@@ -383,9 +393,333 @@ const main = async () => {
     },
     articleID: "unknown",
   };
+  // Get all article zone segregated based on it's style
+  // Sort all of those values in each segregation based on it's distance
+  // merge those zones in each segregation if they overlap and have same width/height
+  // Merge first letter with zone
+  let article_segregation = {};
+  for (let [key, article] of Object.entries(articleCollection)) {
+    const tempObj = {};
+    for (let article_obj of article.ArticleJson) {
+      const { articleID, color, coordinates } = article;
+      const { zoneText, coordinates: textCoordinate } = article_obj;
+      if (article_obj.Tag === "Image") {
+        if (tempObj.Image) {
+          tempObj.Image = [
+            ...tempObj.Image,
+            { imageCoordinates: textCoordinate },
+          ];
+        } else {
+          tempObj.Image = [{ imageCoordinates: textCoordinate }];
+        }
+      } else if (articleID === "unknown") {
+        if (tempObj.textContents) {
+          tempObj.textContents = [
+            ...tempObj.textContents,
+            { textCoordinate, zoneText },
+          ];
+        } else {
+          tempObj.textContents = [{ textCoordinate, zoneText }];
+        }
+      } else {
+        // let { name, ...style } = article_obj.style;
+        let { name, serif, italic, color, ...style } = article_obj.style;
+        style.size = Math.round(style.size);
+        if (tempObj[JSON.stringify(style)]) {
+          tempObj[JSON.stringify(style)] = [
+            ...tempObj[JSON.stringify(style)],
+            { textCoordinate, zoneText },
+          ];
+        } else {
+          tempObj[JSON.stringify(style)] = [{ textCoordinate, zoneText }];
+        }
+      }
+      // Each of these keys has multiple zones with different styles
+      const key = {
+        articleID,
+        color,
+        coordinates,
+      };
+      // We need all of those different styles as key and value as array of zones with those style
+      article_segregation[JSON.stringify(key)] = tempObj;
+    }
+  }
+  // let articleMap = new Map();
+  // for (let [key, article] of Object.entries(articleCollection)) {
+  //   const newMap = new Map();
+  //   for (let article_obj of article.ArticleJson) {
+  //     const { articleID, color, coordinates } = article;
+  //     const { zoneText, coordinates: textCoordinate } = article_obj;
+  //     if (article_obj.Tag === "Image") {
+  //       if (newMap.get("Image")) {
+  //         const imageArr = newMap.get("Image");
+  //         imageArr.push({ imageCoordinates: textCoordinate });
+  //         newMap.set("Image", imageArr);
+  //       } else {
+  //         newMap.set("Image", [{ imageCoordinates: textCoordinate, zoneText }]);
+  //       }
+  //     } else {
+  //       const { name: qwe = "", ...style } = article_obj.style ?? {};
+  //       if (newMap.get(style)) {
+  //         const contentArr = newMap.get(JSON.stringify(style));
+  //         contentArr.push({ textCoordinate, zoneText });
+  //         newMap.set(JSON.stringify(style), contentArr);
+  //       } else {
+  //         newMap.set(JSON.stringify(style), [{ textCoordinate, zoneText }]);
+  //       }
+  //     }
+  //     // Each of these keys has multiple zones with different styles
+  //     const key = {
+  //       articleID,
+  //       color,
+  //       coordinates,
+  //     };
+  //     // We need all of those different styles as key and value as array of zones with those style
+  //     articleMap.set(JSON.stringify(key), newMap);
+  //   }
+  // }
+
+  let article_segregation_2 = {};
+  // segregation_2 changes the raw style to it's tag type
+  const getParent = (arr, idx) => {
+    const index = ((idx - 1) / 2) | 0;
+    return { value: arr[index].val, index };
+  };
+  const swap = (arr, idxFrom, idxTo) => {
+    const temp = arr[idxFrom];
+    arr[idxFrom] = arr[idxTo];
+    arr[idxTo] = temp;
+    return arr;
+  };
+  const largestChild = (left, right) => {
+    if (!right.node) return left.node;
+    left ? left.node.val > right.node.val : right;
+  };
+  const children = (arr, idx) => {
+    const left_idx = 2 * idx + 1;
+    const right_idx = 2 * idx + 2;
+    return {
+      left: { node: arr[left_idx], index: left_idx },
+      right: { node: arr[right_idx], index: right_idx },
+    };
+  };
+  const insertItem = (arr, obj) => {
+    let pos = arr.length;
+    arr.push(obj);
+    if (pos === 0) return arr;
+    while (arr[pos].val > getParent(arr, pos).value) {
+      parent_pos = getParent(arr, pos).index;
+      arr = swap(arr, pos, parent_pos);
+      pos = parent_pos;
+    }
+    return arr;
+  };
+  const getItem = (arr) => {
+    const first_item = arr[0];
+    // last item becames first
+    const last_item = arr.pop();
+    arr[0] = last_item;
+    let pos = 0;
+    while (
+      arr[pos].val <
+      largestChild(children(arr, pos).left, children(arr, pos).right)
+    ) {
+      const maxChild = largestChild(
+        children(arr, pos).left,
+        children(arr, pos).right
+      );
+      arr = swap(arr, pos, maxChild.index);
+      pos = maxChild.index;
+    }
+    return first_item;
+  };
+  for (let [key, value] of Object.entries(
+    JSON.parse(JSON.stringify(article_segregation))
+  )) {
+    // Handling untagged articles
+    const { articleID } = JSON.parse(key);
+    if (articleID === "unknown") {
+      article_segregation_2[key] = value;
+      continue;
+    }
+    // content with maximum characters will be stored in below variable
+    let maxLength = { key: "unknown", length: -Infinity };
+    // content with single letter will be stored in below variable
+    let oneLetter = [];
+    // content with maximum font size will be stored in below variable
+    let maxFontSize = { key: "unknown", size: -Infinity };
+
+    // array of font sizes
+    let fontSizes = [],
+      // array of number of characters
+      characterLengths = [];
+
+    for (let [style, contentArr] of Object.entries(value)) {
+      if (style === "Image") {
+        article_segregation_2 = {
+          ...article_segregation_2,
+          // [key]: { [style]: contentArr },
+          [key]: { Image: contentArr },
+        };
+      } else {
+        const text_style = JSON.parse(style);
+        // const { color, size, weight, italic, serif } = style;
+        const { size, weight } = text_style;
+        if (!(contentArr.length === 1 && contentArr[0].zoneText.length === 1))
+          fontSizes = insertItem(fontSizes, { style, val: size });
+
+        if (size > maxFontSize.size) {
+          if (!(contentArr.length === 1 && contentArr[0].zoneText.length === 1))
+            maxFontSize = { key: style, size };
+        }
+        let local_length = 0;
+        for (let content of contentArr) {
+          if (content.zoneText.length === 1) {
+            oneLetter.push({ content, style });
+          }
+          local_length += content.zoneText.length;
+        }
+        characterLengths = insertItem(characterLengths, {
+          val: local_length,
+          style,
+        });
+        if (maxLength.length < local_length) {
+          maxLength.key = style;
+          maxLength.length = local_length;
+        }
+      }
+    }
+    if (characterLengths.length === 0) continue;
+    const tagged = new Set();
+    // while (fontSizes.length !== 0) {
+    //   temp_arr.push(getItem(fontSizes));
+    // }
+    let temp = article_segregation[key];
+    const highestCharacter = getItem(characterLengths).style;
+    temp.body = temp[highestCharacter];
+    tagged.add(highestCharacter);
+    delete temp[highestCharacter];
+    if (oneLetter.length !== 0) {
+      for (let letter of oneLetter) {
+        const new_content = letter.content.zoneText + temp.body[0].zoneText;
+        const new_zone = CartesianThings.mergeBox(
+          new Map(Object.entries(letter.content.textCoordinate)),
+          new Map(Object.entries(temp.body[0].textCoordinate))
+        );
+        temp.body.splice(0, 1, {
+          textCoordinate: Object.fromEntries(new_zone),
+          zoneText: new_content,
+        });
+        // temp.body.push(letter.content);
+        delete temp[letter.style];
+      }
+    }
+    let largestFontSize = getItem(fontSizes).style;
+    // while (tagged.has(largestFontSize)) {
+    //   largestFontSize = getItem(fontSizes).style;
+    // }
+    temp.title = temp[largestFontSize];
+    tagged.add(largestFontSize);
+    delete temp[largestFontSize];
+    article_segregation_2[key] = temp;
+  }
+
+  // TODO:
+  // In each style, check if there is a content with just one letter
+  // If yes, check for zones that itercepts and then merge the firstletter with body
+  // 2 approaches, check for zones that itercepts on right side - so first letter will be merged as it is suppose to
+  // or merge it and then check for overlapping and merge zones that overlap - entire content will be merged and then dupilate part will be removed
+  // -------------------------
+
+  // Merge sytle values that overlap
+  // TODO: Loop entirely or sort based on distance and then use the below approach
+  for (let [key, article_zone] of Object.entries(article_segregation_2)) {
+    for (let [style, text_zone_arr] of Object.entries(article_zone)) {
+      textZone = [];
+      const { articleID } = JSON.parse(key);
+      if (
+        articleID === "unknown" ||
+        style === "Image" ||
+        //  For undefined title
+        text_zone_arr == null
+      )
+        continue;
+      // Merging article body(zones with same width and if there touch or overlap)
+      i = 0;
+      let j = 1;
+      while (j < text_zone_arr.length) {
+        const zone = new Map(Object.entries(text_zone_arr[i].textCoordinate));
+        const nextZone = new Map(
+          Object.entries(text_zone_arr[j].textCoordinate)
+        );
+        const cond = (i, j) => {
+          if (text_zone_arr[j] == null) return false;
+          const isOverlapping = CartesianThings.isOverlappingOrTouching_approx(
+            new Map(Object.entries(text_zone_arr[i].textCoordinate)),
+            new Map(Object.entries(text_zone_arr[j].textCoordinate))
+          );
+          return (
+            text_zone_arr[i].textCoordinate.x1 -
+              text_zone_arr[j].textCoordinate.x1 <=
+              1 &&
+            text_zone_arr[i].textCoordinate.x2 -
+              text_zone_arr[j].textCoordinate.x2 <=
+              1 &&
+            isOverlapping
+          );
+        };
+        if (cond(i, j)) {
+          while (cond(j, j + 1)) {
+            j++;
+          }
+          const newZone = CartesianThings.mergeBox(
+            new Map(Object.entries(text_zone_arr[i].textCoordinate)),
+            new Map(Object.entries(text_zone_arr[j].textCoordinate))
+          );
+          let newContent = [];
+          for (let idx = i; idx <= j; idx++)
+            newContent.push(text_zone_arr[idx].zoneText);
+          const reqData = {
+            textCoordinate: Object.fromEntries(newZone),
+            zoneText: newContent.join("\n"),
+            tag: style,
+          };
+          newZone.set("content", newContent.join("\n"));
+
+          textZone.push(reqData);
+          i = j + 1;
+          j = i + 1;
+        } else {
+          textZone.push({ ...text_zone_arr[i], tag: style });
+          i++;
+          j++;
+        }
+      }
+      if (i < text_zone_arr.length)
+        textZone.push({ ...text_zone_arr[i], tag: style });
+      // Merge Completed
+      article_segregation_2[key][style] = textZone;
+    }
+  }
   const reqArr = [];
-  for (let article in articleCollection)
-    reqArr.push(articleCollection[article]);
+  // for (let article in articleCollection)
+  //   reqArr.push(articleCollection[article]);
+  for (let [key, value] of Object.entries(article_segregation_2)) {
+    const articleZone = JSON.parse(key);
+    const ArticleJson = [];
+    for (let [tag, zone] of Object.entries(value)) {
+      if (zone == null) continue;
+      for (let data of zone) {
+        const reqData = {
+          zoneText: data.zoneText,
+          coordinates: data.textCoordinate ?? data.imageCoordinates,
+          Tag: tag,
+        };
+        ArticleJson.push(reqData);
+      }
+    }
+    reqArr.push({ ...articleZone, ArticleJson });
+  }
   // DB op
   const mongoose = require("mongoose");
   mongoose.set("strictQuery", true);
