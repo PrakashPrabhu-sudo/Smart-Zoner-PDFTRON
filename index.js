@@ -254,7 +254,7 @@ const main = async () => {
   const { originalFile: file, pageHeight: fromAPI } = await getPdf(pdfFilePath);
   pageHeight = fromAPI;
   // Image Extraction
-  let imgArr = imagesInPDF();
+  let imgArr = await imagesInPDF();
 
   // Surface Zoning Started...
   const pdfAnnotation = await surfaceZoning(file, pdfFileName);
@@ -460,40 +460,6 @@ const main = async () => {
       article_segregation[JSON.stringify(key)] = tempObj;
     }
   }
-  //- let articleMap = new Map();
-  //- for (let [key, article] of Object.entries(articleCollection)) {
-  //-   const newMap = new Map();
-  //-   for (let article_obj of article.ArticleJson) {
-  //-     const { articleID, color, coordinates } = article;
-  //-     const { zoneText, coordinates: textCoordinate } = article_obj;
-  //-     if (article_obj.Tag === "Image") {
-  //-       if (newMap.get("Image")) {
-  //-         const imageArr = newMap.get("Image");
-  //-         imageArr.push({ imageCoordinates: textCoordinate });
-  //-         newMap.set("Image", imageArr);
-  //-       } else {
-  //-         newMap.set("Image", [{ imageCoordinates: textCoordinate, zoneText }]);
-  //-       }
-  //-     } else {
-  //-       const { name: qwe = "", ...style } = article_obj.style ?? {};
-  //-       if (newMap.get(style)) {
-  //-         const contentArr = newMap.get(JSON.stringify(style));
-  //-         contentArr.push({ textCoordinate, zoneText });
-  //-         newMap.set(JSON.stringify(style), contentArr);
-  //-       } else {
-  //-         newMap.set(JSON.stringify(style), [{ textCoordinate, zoneText }]);
-  //-       }
-  //-     }
-  //-     // Each of these keys has multiple zones with different styles
-  //-     const key = {
-  //-       articleID,
-  //-       color,
-  //-       coordinates,
-  //-     };
-  //-     // We need all of those different styles as key and value as array of zones with those style
-  //-     articleMap.set(JSON.stringify(key), newMap);
-  //-   }
-  //- }
 
   let article_segregation_2 = {};
   // segregation_2 changes the raw style to it's tag type
