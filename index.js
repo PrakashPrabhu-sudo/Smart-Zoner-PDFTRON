@@ -3,6 +3,7 @@ const axios = require("axios");
 const util = require("util");
 const parseString = util.promisify(require("xml2js").parseString);
 const { PDFNet } = require("@pdftron/pdfnet-node");
+const path = require("path");
 
 // Local files
 const imageExtract = require("./Utils/imageExtract");
@@ -11,6 +12,12 @@ const CartesianThings = require("./Utils/CartesianThings");
 const colorArr = require("./Utils/colors");
 
 const demo = process.env.demo;
+let pageHeight;
+
+const directoryPath = path.join(__dirname, "PDF_FILE");
+const pdfFileName = fs.readdirSync(directoryPath)[0];
+const pdfFilePath = path.join(directoryPath, pdfFileName);
+const smartZoneAPI_path = "F:\\Zone Stellar\\smart_zone_api\\public\\test.pdf";
 
 const articleZoning = async (bufferData) => {
   try {
@@ -30,14 +37,15 @@ const articleZoning = async (bufferData) => {
         responseType: "arraybuffer",
       }
     );
-    const contentType = res.headers["content-type"];
-    console.log("contentType: ", contentType);
+    // const contentType = res.headers["content-type"];
+    // console.log("contentType: ", contentType);
 
     let buffer = Buffer.from(res.data);
     if (demo) {
       fs.writeFile(`${__dirname}/articleZone.zip`, buffer, (err) => {
-        if (err) console.log(err);
-        else console.log("Article Zoning Success");
+        if (err) {
+          console.log("err: ", err);
+        } else console.log("Article Zoning Success");
       });
     }
 
@@ -62,8 +70,8 @@ const surfaceZoning = async (pdfFile, pdfFileName) => {
         responseType: "arraybuffer",
       }
     );
-    const contentType = res.headers["content-type"];
-    console.log("contentType: ", contentType);
+    // const contentType = res.headers["content-type"];
+    // console.log("contentType: ", contentType);
 
     let buffer = Buffer.from(res.data);
     if (demo) {
@@ -84,7 +92,7 @@ const surfaceZoning = async (pdfFile, pdfFileName) => {
 //   return originalFile;
 // };
 const getPdf = async (path) => {
-  const originalFile = fs.readFileSync(__dirname + "/" + path);
+  const originalFile = fs.readFileSync(path);
   const doc = await PDFNet.PDFDoc.createFromFilePath(path);
   doc.initSecurityHandler();
   const itr = await doc.getPageIterator();
@@ -93,73 +101,80 @@ const getPdf = async (path) => {
   return { originalFile, pageHeight };
 };
 
-const main = async () => {
-  await await PDFNet.initialize(
-    "demo:kishore.k@harnstech.com:7abe10f00200000000ab2ff8f0e2d8d969089ccb724506a23f33470aeb"
-  );
-  const pdfFileName = "test.pdf";
-  const { originalFile: file, pageHeight } = await getPdf(pdfFileName);
+const copyFile2SmartZoner = (sz_path) => {
+  fs.copyFile(pdfFilePath, sz_path, (err) => {
+    console.log("err: ", err);
+  });
+};
+
+const imagesInPDF = async () => {
   // Image Extraction
-  const tempImgArr = await imageExtract(
-    `${__dirname}/test.pdf`,
+  let imgArr = await imageExtract(
+    pdfFilePath,
     `${__dirname}/Images/`,
     pageHeight
   );
 
-  // Checking each images if their centers are inside other image
-  // if yes, merging those images together
-  let imgArr = [];
-  let num = 0;
-  while (num < tempImgArr.length - 1) {
-    const firstImg = tempImgArr[num];
-    const secondImg = tempImgArr[num + 1];
-    const centerofBox1 = CartesianThings.centerOf(tempImgArr[num]);
-    const centerofBox2 = CartesianThings.centerOf(tempImgArr[num + 1]);
+  // # 1. create present image, i and j for index, i =0 & j=1+1
+  // # 2. assign present image to arr[i]
+  // # 3. Loop through the array from j= i+1 to j = length of array -1
+  // # 3. compare present image with arr[j]
+  // #  a. if they should merge,
+  // #     i) merge the image and overwrite the present image
+  // #    ii) mark deleted to the jth image
+  // #   iii) reassign j=i+1, if arr[i+1] has deleted true, increment till deleted is false
+  // #    iv) continue the loop such that present imagae is compared with j
+  // # b. if they should not merge,
+  // #    increment the j and carry on
+  // # Finally an array with combination of merged images, deleted images, untouched images will the there
+  // # Remove the deleted images
 
-    // First inside second
-    const FIS = CartesianThings.isContainedWitinin(centerofBox1, secondImg);
+  let i = 0,
+    j = 1;
+  while (i < imgArr.length - 1) {
+    while (imgArr[i].get("deleted")) i++;
+    let presentImg = imgArr[i];
+    j = i + 1;
+    while (j < imgArr.length - 1) {
+      const compareImg = imgArr[j];
+      const centerofPresentImg = CartesianThings.centerOf(presentImg);
+      const centerofCompareImg = CartesianThings.centerOf(compareImg);
 
-    // Second inside first
-    const SIF = CartesianThings.isContainedWitinin(centerofBox2, firstImg);
-    if (FIS || SIF) {
-      const newImg = CartesianThings.mergeBox(firstImg, secondImg);
-      newImg.delete("isCompleteImage");
-      newImg.set("Tag", "Image");
-      imgArr.push(newImg);
-    } else {
-      const temp = new Map(firstImg);
-      temp.delete("isCompleteImage");
-      temp.set("Tag", "Image");
-      imgArr.push(temp);
+      // FIS => "First Inside Second"
+      const FIS = CartesianThings.isContainedWitinin(
+        centerofPresentImg,
+        compareImg
+      );
+
+      // SIF => "Second Inside First"
+      const SIF = CartesianThings.isContainedWitinin(
+        centerofCompareImg,
+        presentImg
+      );
+
+      // Checking if image's center is inside the other image
+      if (FIS || SIF) {
+        const mergedImage = CartesianThings.mergeBox(presentImg, compareImg);
+        presentImg = mergedImage;
+        imgArr[j].set("deleted", true);
+        j += 1;
+        while (imgArr[j].get("deleted")) j++;
+      } else j++;
     }
-    num++;
+    i++;
   }
-  const temp = new Map(tempImgArr[num]);
-  temp.delete("isCompleteImage");
-  imgArr.push(temp);
-  // -------ImgArr contains the required image information----------
 
-  // Surface Zoning Started...
-  const pdfAnnotation = await surfaceZoning(file, pdfFileName);
+  imgArr = imgArr
+    .filter((img) => !img.get("deleted"))
+    .map((img) => img.set("Tag", "Image"));
 
-  const annotationContents = unzipper(pdfAnnotation);
-  const pdfFileWithAnotation = annotationContents.files.find((item) =>
-    item.name.endsWith(".pdf")
-  );
+  // ImgArr contains the required image information
+  return imgArr;
+};
 
-  // Article Zoning Started...
-  const articleZone = await articleZoning(pdfFileWithAnotation);
-  const coordinateContents = unzipper(articleZone);
-
-  const reqFile = {};
-  coordinateContents.files.forEach((file) => {
-    if (file.name.endsWith(".json")) reqFile.json = file;
-    else if (file.name.endsWith(".xfdf")) reqFile.xfdf = file;
-  });
-
+const surfaceZoneArray = (xfdfData) => {
   // Surface zones
   let zones = [];
-  const xfdfData = await parseString(reqFile.xfdf.data);
 
   for (let zone of xfdfData.xfdf.annots[0].square) {
     // const [x1, y1, x2, y2] = zone.$.rect.split(",");
@@ -177,13 +192,12 @@ const main = async () => {
       ])
     );
   }
+  return zones;
+};
 
-  // Article Zones
-  let textContents = Buffer.from(reqFile.json.data);
-  textContents = textContents.toString("utf-8");
-  textContents = JSON.parse(textContents);
-  // Merging lines zones to a complete para zones
+const articleZoneArray = (textContents, imgArr) => {
   let tempTextZone = [];
+  // Merging lines zones to a complete para zones
   for (let segment of textContents.pages[0].elements) {
     let x1 = Infinity,
       y1 = Infinity,
@@ -191,6 +205,19 @@ const main = async () => {
       y2 = -Infinity,
       content = "",
       style;
+    // Type would probably be Table if segment.kids is undefined
+    if (segment.type === "table") {
+      const tableImage = new Map();
+      tableImage.set("Tag", "Image");
+      tableImage.set("name", `Table_${imgArr.length + 1}`);
+      tableImage.set("x1", segment.rect[0]);
+      tableImage.set("y1", pageHeight - segment.rect[3]);
+      tableImage.set("x2", segment.rect[2]);
+      tableImage.set("y2", pageHeight - segment.rect[1]);
+
+      imgArr.push(tableImage);
+      continue;
+    }
     for (let para of segment.kids) {
       if (!content) content += para.text;
       else content = content + "\n" + para.text;
@@ -215,68 +242,48 @@ const main = async () => {
       ])
     );
   }
-  // // Merging first letter with body
-  // let tempMergedTextZone = [];
-  // let i = 0;
-  // while (i < tempTextZone.length - 1) {
-  //   const zone = tempTextZone[i];
-  //   const nextZone = tempTextZone[i + 1];
-  //   if (zone.get("content").trim().length === 1) {
-  //     const newZone = CartesianThings.mergeBox(zone, nextZone);
-  //     newZone.set("content", zone.get("content") + nextZone.get("content"));
-  //     tempMergedTextZone.push(newZone);
-  //     i += 2;
-  //   } else {
-  //     tempMergedTextZone.push(zone);
-  //     i++;
-  //   }
-  // }
-  // tempMergedTextZone.push(tempTextZone[i]);
-  // tempTextZone = tempMergedTextZone;
-  // // Merge Completed
+  // Merge Completed
+  return tempTextZone;
+};
 
-  // // Merging article body(zones with same width and if there touch or overlap)
-  // let textZone = [];
-  // i = 0;
-  // let j = 1;
-  // while (j < tempTextZone.length) {
-  //   const zone = tempTextZone[i];
-  //   const nextZone = tempTextZone[j];
-  //   const cond = (i, j) => {
-  //     const isOverlapping = CartesianThings.isOverlappingOrTouching_approx(
-  //       tempTextZone[i],
-  //       tempTextZone[j]
-  //     );
-  //     return (
-  //       tempTextZone[i].get("x1") - tempTextZone[j].get("x1") <= 1 &&
-  //       tempTextZone[i].get("x2") - tempTextZone[j].get("x2") <= 1 &&
-  //       isOverlapping
-  //     );
-  //   };
-  //   if (cond(i, j)) {
-  //     while (cond(j, j + 1)) {
-  //       j++;
-  //     }
-  //     const newZone = CartesianThings.mergeBox(
-  //       tempTextZone[i],
-  //       tempTextZone[j]
-  //     );
-  //     let newContent = [];
-  //     for (let idx = i; idx <= j; idx++)
-  //       newContent.push(tempTextZone[idx].get("content"));
-  //     newZone.set("content", newContent.join("\n"));
-  //     textZone.push(newZone);
-  //     i = j + 1;
-  //     j = i + 1;
-  //   } else {
-  //     textZone.push(zone);
-  //     i++;
-  //     j++;
-  //   }
-  // }
-  // textZone.push(tempTextZone[i]);
-  // // Merge Completed
-  let textZone = tempTextZone; // comment for merging body (for now)
+const main = async () => {
+  await PDFNet.initialize(
+    "demo:kishore.k@harnstech.com:7abe10f00200000000ab2ff8f0e2d8d969089ccb724506a23f33470aeb"
+  );
+
+  const { originalFile: file, pageHeight: fromAPI } = await getPdf(pdfFilePath);
+  pageHeight = fromAPI;
+  // Image Extraction
+  let imgArr = imagesInPDF();
+
+  // Surface Zoning Started...
+  const pdfAnnotation = await surfaceZoning(file, pdfFileName);
+
+  const annotationContents = unzipper(pdfAnnotation);
+  const pdfFileWithAnotation = annotationContents.files.find((item) =>
+    item.name.endsWith(".pdf")
+  );
+
+  // Article Zoning Started...
+  const articleZone = await articleZoning(pdfFileWithAnotation);
+  const coordinateContents = unzipper(articleZone);
+
+  const reqFile = {};
+  coordinateContents.files.forEach((file) => {
+    if (file.name.endsWith(".json")) reqFile.json = file;
+    else if (file.name.endsWith(".xfdf")) reqFile.xfdf = file;
+  });
+
+  // Surface zones
+  const xfdfData = await parseString(reqFile.xfdf.data);
+  let zones = surfaceZoneArray(xfdfData);
+
+  // Article Zones
+  let textContents = Buffer.from(reqFile.json.data);
+  textContents = textContents.toString("utf-8");
+  textContents = JSON.parse(textContents);
+
+  let textZone = articleZoneArray(textContents, imgArr);
 
   // Tagging para and image zones to surface zones
   for (let zone of zones) {
@@ -302,25 +309,37 @@ const main = async () => {
     }
   }
   // Handling UnTagged data
-  let unTaggedTextZone = textZone
-    .filter((item) => !item.get("tagged"))
-    .map((item) => {
+  let unTaggedExists = false;
+  let unTagged = [];
+  textZone = textZone.map((item) => {
+    if (!item.get("tagged")) {
+      unTaggedExists = true;
+      unTagged.push(Object.fromEntries(item));
       const temp = new Map(item);
       temp.set("tagged", true);
       temp.set("taggedTo", "unknown...👻");
       return temp;
-    });
-  let unTaggedImg = imgArr
-    .filter((item) => !item.get("tagged"))
-    .map((item) => {
-      const temp = new Map(item);
-      temp.set("tagged", true);
-      temp.set("taggedTo", "unknown...👻");
-      return temp;
-    });
+    }
+    return item;
+  });
+  fs.writeFileSync(
+    `${__dirname}/unTagged.txt`,
+    JSON.stringify(unTagged),
+    (err) => {
+      console.log("err: ", err);
+    }
+  );
 
-  textZone = textZone.concat(unTaggedTextZone);
-  imgArr = imgArr.concat(unTaggedImg);
+  imgArr = imgArr.map((item) => {
+    if (!item.get("tagged")) {
+      unTaggedExists = true;
+      const temp = new Map(item);
+      temp.set("tagged", true);
+      temp.set("taggedTo", "unknown...👻");
+      return temp;
+    }
+    return item;
+  });
 
   // Object with article no as key and value as para zones
   const articleCollection = {};
@@ -346,22 +365,18 @@ const main = async () => {
   }
   // Object with article no as key and value as image zones
   for (let img of imgArr) {
-    if (img.get("tagged") == null) continue;
-    else {
-      const reqData = {
-        Tag: img.get("Tag"),
-        coordinates: {
-          x1: img.get("x1"),
-          y1: img.get("y1"),
-          x2: img.get("x2"),
-          y2: img.get("y2"),
-        },
-      };
-      if (!articleCollection[`article_no:${img.get("taggedTo")}`]) {
-        articleCollection[`article_no:${img.get("taggedTo")}`] = [reqData];
-      } else
-        articleCollection[`article_no:${img.get("taggedTo")}`].push(reqData);
-    }
+    const reqData = {
+      Tag: img.get("Tag"),
+      coordinates: {
+        x1: img.get("x1"),
+        y1: img.get("y1"),
+        x2: img.get("x2"),
+        y2: img.get("y2"),
+      },
+    };
+    if (!articleCollection[`article_no:${img.get("taggedTo")}`]) {
+      articleCollection[`article_no:${img.get("taggedTo")}`] = [reqData];
+    } else articleCollection[`article_no:${img.get("taggedTo")}`].push(reqData);
   }
   for (let zone of zones) {
     if (
@@ -382,17 +397,18 @@ const main = async () => {
       };
     }
   }
-  articleCollection["article_no:unknown...👻"] = {
-    ArticleJson: articleCollection["article_no:unknown...👻"],
-    color: "#000000",
-    coordinates: {
-      x1: 0,
-      y1: 0,
-      x2: 0,
-      y2: 0,
-    },
-    articleID: "unknown",
-  };
+  if (unTaggedExists)
+    articleCollection["article_no:unknown...👻"] = {
+      ArticleJson: articleCollection["article_no:unknown...👻"],
+      color: "#000000",
+      coordinates: {
+        x1: 0,
+        y1: 0,
+        x2: 0,
+        y2: 0,
+      },
+      articleID: "unknown",
+    };
   // Get all article zone segregated based on it's style
   // Sort all of those values in each segregation based on it's distance
   // merge those zones in each segregation if they overlap and have same width/height
@@ -444,40 +460,40 @@ const main = async () => {
       article_segregation[JSON.stringify(key)] = tempObj;
     }
   }
-  // let articleMap = new Map();
-  // for (let [key, article] of Object.entries(articleCollection)) {
-  //   const newMap = new Map();
-  //   for (let article_obj of article.ArticleJson) {
-  //     const { articleID, color, coordinates } = article;
-  //     const { zoneText, coordinates: textCoordinate } = article_obj;
-  //     if (article_obj.Tag === "Image") {
-  //       if (newMap.get("Image")) {
-  //         const imageArr = newMap.get("Image");
-  //         imageArr.push({ imageCoordinates: textCoordinate });
-  //         newMap.set("Image", imageArr);
-  //       } else {
-  //         newMap.set("Image", [{ imageCoordinates: textCoordinate, zoneText }]);
-  //       }
-  //     } else {
-  //       const { name: qwe = "", ...style } = article_obj.style ?? {};
-  //       if (newMap.get(style)) {
-  //         const contentArr = newMap.get(JSON.stringify(style));
-  //         contentArr.push({ textCoordinate, zoneText });
-  //         newMap.set(JSON.stringify(style), contentArr);
-  //       } else {
-  //         newMap.set(JSON.stringify(style), [{ textCoordinate, zoneText }]);
-  //       }
-  //     }
-  //     // Each of these keys has multiple zones with different styles
-  //     const key = {
-  //       articleID,
-  //       color,
-  //       coordinates,
-  //     };
-  //     // We need all of those different styles as key and value as array of zones with those style
-  //     articleMap.set(JSON.stringify(key), newMap);
-  //   }
-  // }
+  //- let articleMap = new Map();
+  //- for (let [key, article] of Object.entries(articleCollection)) {
+  //-   const newMap = new Map();
+  //-   for (let article_obj of article.ArticleJson) {
+  //-     const { articleID, color, coordinates } = article;
+  //-     const { zoneText, coordinates: textCoordinate } = article_obj;
+  //-     if (article_obj.Tag === "Image") {
+  //-       if (newMap.get("Image")) {
+  //-         const imageArr = newMap.get("Image");
+  //-         imageArr.push({ imageCoordinates: textCoordinate });
+  //-         newMap.set("Image", imageArr);
+  //-       } else {
+  //-         newMap.set("Image", [{ imageCoordinates: textCoordinate, zoneText }]);
+  //-       }
+  //-     } else {
+  //-       const { name: qwe = "", ...style } = article_obj.style ?? {};
+  //-       if (newMap.get(style)) {
+  //-         const contentArr = newMap.get(JSON.stringify(style));
+  //-         contentArr.push({ textCoordinate, zoneText });
+  //-         newMap.set(JSON.stringify(style), contentArr);
+  //-       } else {
+  //-         newMap.set(JSON.stringify(style), [{ textCoordinate, zoneText }]);
+  //-       }
+  //-     }
+  //-     // Each of these keys has multiple zones with different styles
+  //-     const key = {
+  //-       articleID,
+  //-       color,
+  //-       coordinates,
+  //-     };
+  //-     // We need all of those different styles as key and value as array of zones with those style
+  //-     articleMap.set(JSON.stringify(key), newMap);
+  //-   }
+  //- }
 
   let article_segregation_2 = {};
   // segregation_2 changes the raw style to it's tag type
@@ -542,12 +558,8 @@ const main = async () => {
       article_segregation_2[key] = value;
       continue;
     }
-    // content with maximum characters will be stored in below variable
-    let maxLength = { key: "unknown", length: -Infinity };
     // content with single letter will be stored in below variable
     let oneLetter = [];
-    // content with maximum font size will be stored in below variable
-    let maxFontSize = { key: "unknown", size: -Infinity };
 
     // array of font sizes
     let fontSizes = [],
@@ -568,10 +580,6 @@ const main = async () => {
         if (!(contentArr.length === 1 && contentArr[0].zoneText.length === 1))
           fontSizes = insertItem(fontSizes, { style, val: size });
 
-        if (size > maxFontSize.size) {
-          if (!(contentArr.length === 1 && contentArr[0].zoneText.length === 1))
-            maxFontSize = { key: style, size };
-        }
         let local_length = 0;
         for (let content of contentArr) {
           if (content.zoneText.length === 1) {
@@ -583,10 +591,6 @@ const main = async () => {
           val: local_length,
           style,
         });
-        if (maxLength.length < local_length) {
-          maxLength.key = style;
-          maxLength.length = local_length;
-        }
       }
     }
     if (characterLengths.length === 0) continue;
@@ -601,12 +605,50 @@ const main = async () => {
     delete temp[highestCharacter];
     if (oneLetter.length !== 0) {
       for (let letter of oneLetter) {
-        const new_content = letter.content.zoneText + temp.body[0].zoneText;
-        const new_zone = CartesianThings.mergeBox(
-          new Map(Object.entries(letter.content.textCoordinate)),
-          new Map(Object.entries(temp.body[0].textCoordinate))
+        const toMap = (zone, idx) => {
+          let theMap = new Map();
+          theMap.set("index", idx);
+          theMap.set(
+            "x1",
+            zone.textCoordinate?.x1 ?? zone.content.textCoordinate.x1
+          );
+          theMap.set(
+            "y1",
+            zone.textCoordinate?.y1 ?? zone.content.textCoordinate.y1
+          );
+          theMap.set(
+            "y2",
+            zone.textCoordinate?.y2 ?? zone.content.textCoordinate.y2
+          );
+          theMap.set(
+            "x2",
+            zone.textCoordinate?.x2 ?? zone.content.textCoordinate.x2
+          );
+          theMap.set("zoneText", zone?.zoneText ?? zone.content.zoneText);
+          if (zone.style) theMap.set("style", zone.style);
+          return theMap;
+        };
+        const letterMap = toMap(letter);
+        const bodyMaps = temp.body.map((item, idx) => toMap(item, idx));
+        const probableFits = CartesianThings.probableFirstLetterMatches(
+          letterMap,
+          bodyMaps
         );
-        temp.body.splice(0, 1, {
+        const mostProbableFit = probableFits[0];
+        if (mostProbableFit == null) continue;
+        const new_content =
+          letter.content.zoneText + mostProbableFit.get("zoneText");
+        const new_zone = CartesianThings.mergeBox(letterMap, mostProbableFit);
+        const mergedIndex = mostProbableFit.get("index");
+        // const new_content = letter.content.zoneText + temp.body[0].zoneText;
+        // const new_zone = CartesianThings.mergeBox(
+        //   new Map(Object.entries(letter.content.textCoordinate)),
+        //   new Map(Object.entries(temp.body[0].textCoordinate))
+        // );
+        new_zone.delete("index");
+        new_zone.delete("style");
+        new_zone.delete("zoneText");
+        temp.body.splice(mergedIndex, 1, {
           textCoordinate: Object.fromEntries(new_zone),
           zoneText: new_content,
         });
@@ -632,7 +674,7 @@ const main = async () => {
   // -------------------------
 
   // Merge sytle values that overlap
-  // TODO: Loop entirely or sort based on distance and then use the below approach
+  // Loop entirely or sort based on distance and then use the below approach
   for (let [key, article_zone] of Object.entries(article_segregation_2)) {
     for (let [style, text_zone_arr] of Object.entries(article_zone)) {
       textZone = [];
@@ -659,12 +701,14 @@ const main = async () => {
             new Map(Object.entries(text_zone_arr[j].textCoordinate))
           );
           return (
-            text_zone_arr[i].textCoordinate.x1 -
-              text_zone_arr[j].textCoordinate.x1 <=
-              1 &&
-            text_zone_arr[i].textCoordinate.x2 -
-              text_zone_arr[j].textCoordinate.x2 <=
-              1 &&
+            // // Check if they are of same width-----
+            // text_zone_arr[i].textCoordinate.x1 -
+            // text_zone_arr[j].textCoordinate.x1 <=
+            // 1 &&
+            // text_zone_arr[i].textCoordinate.x2 -
+            // text_zone_arr[j].textCoordinate.x2 <=
+            // 1 &&
+            // // ----------------------------------
             isOverlapping
           );
         };
@@ -740,21 +784,7 @@ const main = async () => {
     })
     .catch((err) => console.log(`Unable to connect to DB ${err}`));
   // DB op
-  const sample = fs.createWriteStream(`${__dirname}/sample.json`);
-  const sampleData = [];
-  for (let map of zones) {
-    const data = {
-      x1: map.get("x1"),
-      x2: map.get("x2"),
-      y2: map.get("y2"),
-      y1: map.get("y1"),
-      color: map.get("customColor"),
-      "article no": map.get("article no"),
-    };
-    sampleData.push(data);
-  }
-  sample.write(JSON.stringify(sampleData));
-  sample.close();
+  copyFile2SmartZoner(smartZoneAPI_path);
 };
 
 main();
