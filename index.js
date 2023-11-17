@@ -247,9 +247,13 @@ const articleZoneArray = (textContents, imgArr) => {
 };
 
 const main = async () => {
-  await PDFNet.initialize(
-    "demo:kishore.k@harnstech.com:7abe10f00200000000ab2ff8f0e2d8d969089ccb724506a23f33470aeb"
-  );
+  try {
+    await PDFNet.initialize(
+      "demo:kishore.k@harnstech.com:7abe10f00200000000ab2ff8f0e2d8d969089ccb724506a23f33470aeb"
+    );
+  } catch (error) {
+    console.log("error:", error);
+  }
 
   const { originalFile: file, pageHeight: fromAPI } = await getPdf(pdfFilePath);
   pageHeight = fromAPI;
@@ -348,7 +352,7 @@ const main = async () => {
     else {
       const reqData = {
         zoneText: data.get("content"),
-        style: data.get("style"), //TODO: no need to store this
+        style: data.get("style"),
         Tag: data.get("Tag"),
         coordinates: {
           x1: data.get("x1"),
@@ -432,10 +436,12 @@ const main = async () => {
         if (tempObj.textContents) {
           tempObj.textContents = [
             ...tempObj.textContents,
-            { textCoordinate, zoneText },
+            { textCoordinate, zoneText, style: article_obj.style },
           ];
         } else {
-          tempObj.textContents = [{ textCoordinate, zoneText }];
+          tempObj.textContents = [
+            { textCoordinate, zoneText, style: article_obj.style },
+          ];
         }
       } else {
         // let { name, ...style } = article_obj.style;
@@ -444,10 +450,12 @@ const main = async () => {
         if (tempObj[JSON.stringify(style)]) {
           tempObj[JSON.stringify(style)] = [
             ...tempObj[JSON.stringify(style)],
-            { textCoordinate, zoneText },
+            { textCoordinate, zoneText, style: article_obj.style },
           ];
         } else {
-          tempObj[JSON.stringify(style)] = [{ textCoordinate, zoneText }];
+          tempObj[JSON.stringify(style)] = [
+            { textCoordinate, zoneText, style: article_obj.style },
+          ];
         }
       }
       // Each of these keys has multiple zones with different styles
@@ -722,6 +730,7 @@ const main = async () => {
       for (let data of zone) {
         const reqData = {
           zoneText: data.zoneText,
+          style: data.style,
           coordinates: data.textCoordinate ?? data.imageCoordinates,
           Tag: tag,
         };
