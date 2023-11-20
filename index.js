@@ -217,30 +217,48 @@ const articleZoneArray = (textContents, imgArr) => {
 
       imgArr.push(tableImage);
       continue;
+    } else if (segment.type === "paragraph") {
+      for (let line of segment.kids) {
+        for (let word of line.kids) {
+          if (word.style) {
+            let bold = true, //TODO: Is style only for bold || itallic || color?
+              italic = false;
+            // check if it's bold
+            if (word.style.name.includes("Bold")) bold = true;
+            // check if it is italic
+            if (word.style.italic) italic = true;
+
+            let reqWord = word.text;
+            if (bold) reqWord = `<b>${reqWord}</b>`;
+            if (italic) reqWord = `<i>${reqWord}</i>`;
+            content += `${reqWord} `;
+          } else {
+            content += `${word.text} `;
+          }
+        }
+        content = content.split("</b> <b>").join(" ");
+        content += "\n";
+        style = line.style;
+        x1 = Math.min(line.rect[0], x1);
+        // y1 = Math.min(pageHeight - line.rect[1], y1);
+        y1 = Math.min(pageHeight - line.rect[3], y1);
+        x2 = Math.max(line.rect[2], x2);
+        // y2 = Math.max(pageHeight - line.rect[3], y2);
+        y2 = Math.max(pageHeight - line.rect[1], y2);
+      }
+      tempTextZone.push(
+        new Map([
+          ["x1", x1],
+          ["y1", y1],
+          ["x2", x2],
+          ["y2", y2],
+          ["Tag", "text"],
+          ["style", style],
+          ["content", content],
+          ["tagged", false],
+        ])
+      );
     }
-    for (let para of segment.kids) {
-      if (!content) content += para.text;
-      else content = content + "\n" + para.text;
-      style = para.style;
-      x1 = Math.min(para.rect[0], x1);
-      // y1 = Math.min(pageHeight - para.rect[1], y1);
-      y1 = Math.min(pageHeight - para.rect[3], y1);
-      x2 = Math.max(para.rect[2], x2);
-      // y2 = Math.max(pageHeight - para.rect[3], y2);
-      y2 = Math.max(pageHeight - para.rect[1], y2);
-    }
-    tempTextZone.push(
-      new Map([
-        ["x1", x1],
-        ["y1", y1],
-        ["x2", x2],
-        ["y2", y2],
-        ["Tag", "text"],
-        ["style", style],
-        ["content", content],
-        ["tagged", false],
-      ])
-    );
   }
   // Merge Completed
   return tempTextZone;
