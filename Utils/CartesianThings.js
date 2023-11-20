@@ -12,7 +12,6 @@ exports.isOverlapping = (rect_1, rect_2) => {
     rect_1.get("y2") <= rect_2.get("y1")
   )
     return false;
-  console.log(rect_1.get("name"), "and", rect_2.get("name"), "are overlapping");
   return true;
 };
 
@@ -30,7 +29,6 @@ exports.isOverlappingOrTouching_approx = (rect_1, rect_2) => {
     ((rect_1.get("y2") + 1) | 0) < (rect_2.get("y1") | 0)
   )
     return false;
-  console.log(rect_1.get("name"), "and", rect_2.get("name"), "are overlapping");
   return true;
 };
 /**
@@ -47,7 +45,6 @@ exports.isOverlappingOrTouching = (rect_1, rect_2) => {
     (rect_1.get("y2") | 0) < (rect_2.get("y1") | 0)
   )
     return false;
-  console.log(rect_1.get("name"), "and", rect_2.get("name"), "are overlapping");
   return true;
 };
 
@@ -95,4 +92,23 @@ exports.isContainedWitinin = (point, box) => {
   const [px, py] = point;
   if (x1 <= px && px <= x2 && y1 <= py && py <= y2) return true;
   else return false;
+};
+
+/**
+ *
+ * @param {*} firstLetterZone coordinates of first letter
+ * @param {*} rectsArr possible rectangles that should be merged with the first letter
+ */
+exports.probableFirstLetterMatches = (firstLetterZone, rectsArr) => {
+  const x1 = firstLetterZone.get("x1");
+  const y1 = firstLetterZone.get("y1");
+  const x2 = firstLetterZone.get("x2");
+  const y2 = firstLetterZone.get("y2");
+
+  let reqRect = rectsArr.filter((rect) => rect.get("x1") + 1 >= x2);
+  reqRect = reqRect.filter((rect) => rect.get("y1") > y1);
+  reqRect = reqRect.filter((rect) => rect.get("y2") < y2);
+  reqRect = reqRect.sort((a, b) => x2 - b.get("x1") - (x2 - a.get("x1")));
+
+  return reqRect;
 };

@@ -45,7 +45,6 @@ const imageExtract = async (reader, outputPath) => {
             ["x2", Number(x2.toFixed(2))],
             // ["y2", pageHeight - Number(y2.toFixed(2))],
             ["y1", pageHeight - Number(y2.toFixed(2))],
-            ["isCompleteImage", "Unknown...👻"],
           ]);
           images.push(temp);
         }
